@@ -1,0 +1,13 @@
+# 忽略编辑器与系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 忽略开发工具的本地记录
+.workbuddy/
+.vscode/
+.idea/
+
+# 忽略本地测试用的导出数据（避免误传真实对话）
+conversations.json
+*.local.zip
