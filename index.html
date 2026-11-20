@@ -2515,7 +2515,7 @@
       if (m.role === 'user') {
         frags.push({ type: 'REQUEST', content: m.text });
       } else {
-        if (keepThink && m.think) frags.push({ type: 'THINK', content: m.think });
+        if (keepThink && m.think) frags.push({ type: 'THINK', content: m.think, elapsed_secs: null });
         frags.push({ type: 'RESPONSE', content: m.text });
       }
       out.push({
@@ -2551,7 +2551,8 @@
     setProgress(0);
 
     var enc = new TextEncoder();
-    var entries = [];
+    // 官方规范：manifest.json 必须是压缩包首个条目
+    var entries = [{ name: 'manifest.json', data: enc.encode('{"export_format_version":3}') }];
     var sessionIndex = [];
 
     eachPicked(sel, function (c) {
@@ -2566,7 +2567,7 @@
         data: enc.encode(JSON.stringify(sess))
       });
     }).then(function () {
-      entries.push({ name: 'manifest.json', data: enc.encode('{"export_format_version":3}') });
+      // 索引放在末尾（官方导入器支持这个顺序）
       entries.push({ name: 'chat_session_index.json', data: enc.encode(JSON.stringify(sessionIndex)) });
       saveBlob(buildZip(entries), 'application/zip',
         '对话存档_' + sel.length + '条_' + stamp() + '.zip');
