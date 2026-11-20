@@ -8,8 +8,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="description" content="解析 DeepSeek 导出数据，合并多账号对话，剔除思考链，生成可续玩的存档文本。全程本地处理，不上传任何数据。">
-<title>对话存档迁移器 · 本地对话清洗与续玩工具</title>
+<meta name="description" content="解析 AI 对话导出数据，合并多账号，剔除思考链，生成可直接接续的存档文本。全程本地处理，不上传任何数据。">
+<title>对话存档迁移器 · 本地对话清洗与存档工具</title>
 <style>
   :root{
     --bg:#070b14;
@@ -771,7 +771,7 @@
       </div>
       <h1>对话存档迁移器</h1>
     </div>
-    <p>解析 DeepSeek 导出数据 · 合并多账号 · 剔除思考链 · 生成可续玩的前情提要</p>
+    <p>解析 AI 对话导出数据 · 合并多账号 · 剔除思考链 · 生成可直接接续的存档</p>
     <div class="tags">
       <span class="tag"><span class="dot" aria-hidden="true"></span>全程本地处理</span>
       <span class="tag gray">零依赖 · 断网可用</span>
@@ -814,7 +814,7 @@
         <span class="step-num">3</span>
         <div>
           <b>一键续玩或存档</b>
-          <span>自定义角色称呼，生成带前情指令的续玩文本或精简合并 JSON。</span>
+          <span>自定义称呼，生成带指令头的存档文本，或精简合并的 JSON。</span>
         </div>
       </div>
     </div>
@@ -831,9 +831,9 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         继续添加
       </button>
-      <button type="button" class="primary" id="expJson">
+      <button type="button" class="primary" id="expJson" title="与 DeepSeek 官方新版导出结构一致，可被本工具再次导入">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        导出合并包 .json
+        导出合并包 .zip
       </button>
       <button type="button" class="mint" id="expTxt">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -908,8 +908,8 @@
         <div class="opt opt-mode">
           <div class="select-wrap">
             <select id="mode" aria-label="输出格式">
-              <option value="summary">续玩格式（带前情指令）</option>
               <option value="clean">纯净对话</option>
+              <option value="summary">续玩格式（带前情指令）</option>
             </select>
           </div>
         </div>
@@ -1283,20 +1283,21 @@
     });
   }
 
-  function pickEntry(zip) {
+  // 一个包里可能有多份 json：优先正典的 conversations.json；没有就把所有 json 都当候选
+  // （按对话分文件导出的平台，每个 json 里就是一条对话）
+  function pickEntries(zip) {
     var names = [];
     zip.entries.forEach(function (_, k) { names.push(k); });
 
-    var target = names.filter(function (n) { return /(^|\/)conversations\.json$/i.test(n); })[0];
-    if (!target) {
-      var jsons = names.filter(function (n) { return /\.json$/i.test(n); });
-      jsons.sort(function (a, b) {
-        return zip.entries.get(b).size - zip.entries.get(a).size;
-      });
-      target = jsons[0];
-    }
-    if (!target) throw new Error('NO_JSON');
-    return zip.entries.get(target);
+    var canonical = names.filter(function (n) { return /(^|\/)conversations\.json$/i.test(n); })[0];
+    if (canonical) return [zip.entries.get(canonical)];
+
+    var jsons = names.filter(function (n) { return /\.json$/i.test(n); });
+    jsons.sort(function (a, b) {
+      return zip.entries.get(b).size - zip.entries.get(a).size;
+    });
+    if (!jsons.length) throw new Error('NO_JSON');
+    return jsons.map(function (n) { return zip.entries.get(n); });
   }
 
   // 只把这一条目的压缩切片交给解压流，整个包从不进内存
@@ -1399,34 +1400,29 @@
   }
 
   function ingestV3(zip, entries, source, onProgress) {
-    var added = 0;
-    var dupes = 0;
-    var skipped = 0;
+    var ctx = newCtx();
     var i = 0;
 
     function next() {
       if (i >= entries.length) {
-        return Promise.resolve({ added: added, dupes: dupes, skipped: skipped });
+        return flushCtx(ctx).then(function () { return ctxResult(ctx); });
       }
       var k = i++;
       var ent = entries[k];
 
-      return readEntryText(zip, ent).then(function (text) {
-        var raw;
-        try { raw = JSON.parse(text); } catch (e) { skipped++; return; }
+      return readEntryText(zip, ent).then(
+        function (text) {
+          var raw;
+          try { raw = JSON.parse(text); } catch (e) { ctx.skipped++; return; }
 
-        var n;
-        try { n = normalize(convertV3Session(raw), source); } catch (e) { skipped++; return; }
-        if (!n) { skipped++; return; }
-        if (ids.has(n.id)) { dupes++; return; }
-        ids.add(n.id);
-
-        return dbPutBatch([n]).then(function () {
-          indexConv(n);
-          added++;
-        });
-      }).catch(function () {
-        skipped++;
+          var n;
+          try { n = normalize(convertV3Session(raw), source); } catch (e) { ctx.skipped++; return; }
+          if (!n) { ctx.skipped++; return; }
+          commitConv(n, ctx);
+        },
+        function () { ctx.skipped++; }
+      ).then(function () {
+        return ctx.pending.length >= 16 ? flushCtx(ctx) : null;
       }).then(function () {
         onProgress(k + 1, entries.length);
         return pace();
@@ -1639,10 +1635,25 @@
 
   /* ---------- 导入：流式读完一条落一条 ---------- */
 
-  function indexConv(c) {
+  function charsOf(c) {
     var chars = 0;
     for (var j = 0; j < c.messages.length; j++) {
       chars += c.messages[j].text.length + c.messages[j].think.length;
+    }
+    return chars;
+  }
+
+  // 返回 true 表示新增，false 表示原地更新了已有条目
+  function indexConv(c) {
+    var chars = charsOf(c);
+    var prev = byId.get(c.id);
+    if (prev) {
+      prev.title = c.title;
+      prev.ts = c.ts;
+      prev.source = c.source;
+      prev.count = c.messages.length;
+      prev.chars = chars;
+      return false;
     }
     var entry = {
       id: c.id, title: c.title, ts: c.ts, source: c.source,
@@ -1650,52 +1661,76 @@
     };
     byId.set(entry.id, entry);
     index.push(entry);
+    return true;
+  }
+
+  // 同一对话再次出现时，保留信息更全的一份：消息更多，或条数相同而更新时间更晚
+  function preferNewer(n) {
+    var prev = byId.get(n.id);
+    if (!prev) return true;
+    return n.messages.length > prev.count ||
+      (n.messages.length === prev.count && n.ts > prev.ts);
+  }
+
+  function newCtx() {
+    return { pending: [], added: 0, updated: 0, dupes: 0, skipped: 0, fileIds: [] };
+  }
+
+  function commitConv(n, ctx) {
+    var prev = byId.get(n.id);
+    if (prev) {
+      if (!preferNewer(n)) { ctx.dupes++; return; }
+      ctx.pending.push(n);
+      return;
+    }
+    ids.add(n.id);
+    ctx.fileIds.push(n.id);
+    ctx.pending.push(n);
+  }
+
+  function flushCtx(ctx) {
+    if (!ctx.pending.length) return Promise.resolve();
+    var batch = ctx.pending;
+    ctx.pending = [];
+    return dbPutBatch(batch).then(function () {
+      for (var i = 0; i < batch.length; i++) {
+        if (indexConv(batch[i])) ctx.added++;
+        else ctx.updated++;
+      }
+    });
+  }
+
+  function rollbackCtx(ctx) {
+    for (var i = 0; i < ctx.fileIds.length; i++) {
+      ids.delete(ctx.fileIds[i]);
+      byId.delete(ctx.fileIds[i]);
+    }
+    var cut = index.length;
+    while (cut > 0 && ctx.fileIds.indexOf(index[cut - 1].id) >= 0) cut--;
+    index.length = cut;
+  }
+
+  function ctxResult(ctx) {
+    return { added: ctx.added, updated: ctx.updated, dupes: ctx.dupes, skipped: ctx.skipped };
   }
 
   function ingestStream(stream, source, totalBytes, onProgress) {
     var reader = stream.getReader();
     var dec = new TextDecoder('utf-8');
-    var pending = [];
-    var added = 0;
-    var dupes = 0;
-    var skipped = 0;
+    var ctx = newCtx();
     var processed = 0;
-    var fileIds = [];
 
     var splitter = makeSplitter(function (text) {
       var raw;
-      try { raw = JSON.parse(text); } catch (e) { skipped++; return; }
+      try { raw = JSON.parse(text); } catch (e) { ctx.skipped++; return; }
       if (!raw || typeof raw !== 'object') return;
 
       var n;
-      try { n = normalize(raw, source); } catch (e) { skipped++; return; }
+      try { n = normalize(raw, source); } catch (e) { ctx.skipped++; return; }
       if (!n) return;
 
-      if (ids.has(n.id)) { dupes++; return; }
-      ids.add(n.id);
-      fileIds.push(n.id);
-      pending.push(n);
+      commitConv(n, ctx);
     });
-
-    function flush() {
-      if (!pending.length) return Promise.resolve();
-      var batch = pending;
-      pending = [];
-      return dbPutBatch(batch).then(function () {
-        for (var i = 0; i < batch.length; i++) indexConv(batch[i]);
-        added += batch.length;
-      });
-    }
-
-    function rollback() {
-      for (var i = 0; i < fileIds.length; i++) {
-        ids.delete(fileIds[i]);
-        byId.delete(fileIds[i]);
-      }
-      var cut = index.length;
-      while (cut > 0 && fileIds.indexOf(index[cut - 1].id) >= 0) cut--;
-      index.length = cut;
-    }
 
     var lastPaint = 0;
 
@@ -1708,10 +1743,10 @@
         var now = Date.now();
         if (now - lastPaint > 90) {
           lastPaint = now;
-          onProgress(processed, totalBytes, added);
+          onProgress(processed, totalBytes, ctx.added + ctx.updated);
         }
 
-        var step = pending.length >= 16 ? flush() : Promise.resolve();
+        var step = ctx.pending.length >= 16 ? flushCtx(ctx) : Promise.resolve();
         return step.then(pace).then(loop);
       });
     }
@@ -1719,16 +1754,62 @@
     function finish() {
       splitter.push(dec.decode());
       splitter.end();
-      return flush().then(function () {
-        return { added: added, dupes: dupes, skipped: skipped };
-      });
+      return flushCtx(ctx).then(function () { return ctxResult(ctx); });
     }
 
     return loop().catch(function (err) {
-      rollback();
+      rollbackCtx(ctx);
       try { reader.cancel(); } catch (e) {}
       throw err;
     });
+  }
+
+  /* 小文件整体解析：兼容「一条对话一个文件」的导出，流式切分只认数组和包装对象 */
+  var SMALL_ENTRY = 4 * 1024 * 1024;
+
+  function ingestText(text, source) {
+    var ctx = newCtx();
+    text = text.replace(/^\uFEFF/, '');
+
+    var data;
+    try { data = JSON.parse(text); } catch (e) { throw new Error('BAD_JSON'); }
+
+    var list = Array.isArray(data)
+      ? data
+      : (data && Array.isArray(data.conversations)) ? data.conversations : [data];
+
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (!c || typeof c !== 'object') { ctx.skipped++; continue; }
+      var n;
+      try { n = normalize(c, source); } catch (e) { ctx.skipped++; continue; }
+      if (!n) { ctx.skipped++; continue; }
+      commitConv(n, ctx);
+    }
+
+    return flushCtx(ctx).then(function () { return ctxResult(ctx); });
+  }
+
+  function ingestEntry(zip, ent, source, onProgress) {
+    if (ent.size <= SMALL_ENTRY) {
+      return readEntryText(zip, ent).then(function (text) {
+        onProgress(ent.size, ent.size, 0);
+        return ingestText(text, source);
+      });
+    }
+    return entryStream(zip, ent).then(function (stream) {
+      return ingestStream(stream, source, ent.size, onProgress);
+    });
+  }
+
+  function ingestFile(file, source, onProgress) {
+    if (file.size <= SMALL_ENTRY) {
+      return file.text().then(function (text) {
+        onProgress(file.size, file.size, 0);
+        return ingestText(text, source);
+      });
+    }
+    return ingestStream(streamOf(file), source, file.size, onProgress);
   }
 
   /* ---------- 导入流程 ---------- */
@@ -1762,6 +1843,7 @@
     var rejected = [];
     var loaded = 0;
     var totalDupes = 0;
+    var totalUpdated = 0;
     var i = 0;
 
     openDb().then(tick).then(function next() {
@@ -1782,39 +1864,24 @@
       var prep;
       if (/\.zip$/i.test(file.name)) {
         prep = openZip(file).then(function (zip) {
-          var v3 = listV3Sessions(zip);
-          if (v3.length) {
-            var v3total = 0;
-            for (var vi = 0; vi < v3.length; vi++) v3total += v3[vi].size;
-            if (v3total > MAX_UNCOMPRESSED) {
-              throw new Error('TOO_BIG::' + mbStr(v3total));
-            }
-            return storageRoom().then(function (room) {
-              var need = v3total * 0.85;
-              if (need > room && !confirm(
-                '「' + file.name + '」解压后约 ' + mbStr(v3total) +
-                '，本地可用的存储空间只剩 ' + mbStr(room) + '。\n\n继续可能写到一半失败，建议先用电脑清理或分批导入。仍要继续吗？'
-              )) {
-                throw new Error('CANCELLED');
-              }
-              return { v3zip: zip, v3entries: v3, total: v3total };
-            });
+          var v3ents = listV3Sessions(zip);
+          var ents = v3ents.length ? v3ents : pickEntries(zip);
+
+          var total = 0;
+          for (var vi = 0; vi < ents.length; vi++) total += ents[vi].size;
+          if (total > MAX_UNCOMPRESSED) {
+            throw new Error('TOO_BIG::' + mbStr(total));
           }
-          var ent = pickEntry(zip);
-          if (ent.size > MAX_UNCOMPRESSED) {
-            throw new Error('TOO_BIG::' + mbStr(ent.size));
-          }
+
           return storageRoom().then(function (room) {
-            var need = ent.size * 0.85;
+            var need = total * 0.85;
             if (need > room && !confirm(
-              '「' + file.name + '」解压后约 ' + mbStr(ent.size) +
+              '「' + file.name + '」解压后约 ' + mbStr(total) +
               '，本地可用的存储空间只剩 ' + mbStr(room) + '。\n\n继续可能写到一半失败，建议先用电脑清理或分批导入。仍要继续吗？'
             )) {
               throw new Error('CANCELLED');
             }
-            return entryStream(zip, ent).then(function (stream) {
-              return { stream: stream, total: ent.size };
-            });
+            return { zip: zip, ents: ents, total: total, v3: v3ents.length > 0 };
           });
         });
       } else {
@@ -1830,24 +1897,49 @@
           )) {
             throw new Error('CANCELLED');
           }
-          return { stream: streamOf(file), total: file.size };
+          return { file: file, total: file.size };
         });
       }
 
       return prep.then(function (job) {
-        if (job.v3zip) {
-          return ingestV3(job.v3zip, job.v3entries, file.name, function (done, total) {
-            var pct = total ? (done / total) * 100 : null;
-            setProgress(pct, seq + ' · ' + done + ' / ' + total + ' 条对话');
+        var acc = { added: 0, updated: 0, dupes: 0, skipped: 0 };
+        function add(r) {
+          acc.added += r.added || 0;
+          acc.updated += r.updated || 0;
+          acc.dupes += r.dupes || 0;
+          acc.skipped += r.skipped || 0;
+        }
+
+        if (job.v3) {
+          return ingestV3(job.zip, job.ents, file.name, function (done, total) {
+            setProgress(total ? (done / total) * 100 : null, seq + ' · ' + done + ' / ' + total + ' 条对话');
+          }).then(function (r) { add(r); return acc; });
+        }
+
+        if (job.file) {
+          return ingestFile(job.file, file.name, function (p, t, n) {
+            var pct = t ? (p / t) * 100 : null;
+            setProgress(pct, seq + ' · 已读 ' + mbStr(p) + ' / ' + mbStr(t) + ' · ' + n + ' 条对话');
+          }).then(function (r) { add(r); return acc; });
+        }
+
+        var k = 0;
+        function step() {
+          if (k >= job.ents.length) return Promise.resolve(acc);
+          var ent = job.ents[k++];
+          var suffix = job.ents.length > 1 ? ' · 第 ' + k + '/' + job.ents.length + ' 份' : '';
+          return ingestEntry(job.zip, ent, file.name, function (p, t, n) {
+            setProgress(((k - 1) / job.ents.length) * 100, seq + suffix + ' · ' + n + ' 条对话');
+          }).then(function (r) {
+            add(r);
+            return pace().then(step);
           });
         }
-        return ingestStream(job.stream, file.name, job.total, function (p, t, n) {
-          var pct = t ? (p / t) * 100 : null;
-          setProgress(pct, seq + ' · 已读 ' + mbStr(p) + ' / ' + mbStr(t) + ' · ' + n + ' 条对话');
-        });
+        return step();
       }).then(function (res) {
         totalDupes += res.dupes;
-        if (res.added > 0) {
+        totalUpdated += res.updated;
+        if (res.added > 0 || res.updated > 0) {
           files.add(file.name);
           loaded += res.added;
         } else if (res.dupes > 0) {
@@ -1902,8 +1994,10 @@
         if (rejected.length) {
           var detail = rejected.length === 1 ? rejected[0] : (rejected[0] + ' 等 ' + rejected.length + ' 个文件');
           toast('部分未载入：' + detail, 'warn');
-        } else if (loaded === 0 && totalDupes > 0) {
+        } else if (loaded === 0 && totalUpdated === 0 && totalDupes > 0) {
           toast('已跳过 ' + totalDupes + ' 条重复对话', 'warn');
+        } else if (totalUpdated > 0) {
+          toast('已载入 ' + loaded + ' 条，另有 ' + totalUpdated + ' 条被更完整的版本替换');
         } else if (totalDupes > 0) {
           toast('新增 ' + loaded + ' 条对话（已去重 ' + totalDupes + ' 条）');
         } else {
@@ -2138,14 +2232,16 @@
   }
 
   function dialogue(c, opts) {
-    var blocks = visibleMessages(c, opts).map(function (m) {
+    var blocks = [];
+    visibleMessages(c, opts).forEach(function (m) {
       var head = m.role === 'system' ? '【设定】' : label(m.role);
       var body = m.text;
       if (opts.keepThink && m.think) {
         body = '〔思考过程〕\n' + m.think + '\n〔正文〕\n' + body;
       }
-      if (!body) body = '（空）';
-      return head + '\n' + body;
+      // 只剩思考、没有正文的轮次（生成被中断），不保留思考链时整条略过，不占位
+      if (!body) return;
+      blocks.push(head + '\n' + body);
     });
     return blocks.join('\n\n' + '─'.repeat(22) + '\n\n');
   }
@@ -2286,50 +2382,6 @@
 
   /* ---------- 导出 ---------- */
 
-  function buildConv(c, keepThink) {
-    var mapping = {};
-    var prev = null;
-    var idx = 0;
-    // 重建的 mapping 里没有 system 的位置，设定消息不写进 JSON
-    var msgs = c.messages.filter(function (m) { return m.role !== 'system'; });
-
-    msgs.forEach(function (m) {
-      var mid = 'm' + (idx++);
-      var frags = [];
-
-      if (m.role === 'user') {
-        frags.push({ type: 'REQUEST', content: m.text });
-      } else {
-        if (keepThink && m.think) frags.push({ type: 'THINK', content: m.think });
-        frags.push({ type: 'RESPONSE', content: m.text });
-      }
-
-      mapping[mid] = {
-        id: mid,
-        parent: prev,
-        children: [],
-        message: { id: mid, role: m.role, content: m.text, fragments: frags }
-      };
-
-      if (prev) mapping[prev].children.push(mid);
-      prev = mid;
-    });
-
-    var t = c.ts ? new Date(c.ts).toISOString() : new Date().toISOString();
-
-    return {
-      id: c.id,
-      title: c.title,
-      create_time: t,
-      update_time: t,
-      current_node: prev,
-      mapping: mapping,
-      messages: msgs.map(function (m) {
-        return { role: m.role, content: m.text };
-      })
-    };
-  }
-
   function chosen() {
     return index.filter(function (c) { return picked.has(c.id); });
   }
@@ -2369,7 +2421,128 @@
     return step();
   }
 
-  function exportJson() {
+  /* ---------- 官方新版格式导出（export_format_version 3 的 zip） ---------- */
+
+  var CRC_TABLE = (function () {
+    var t = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+
+  function crc32(u8) {
+    var c = 0xffffffff;
+    for (var i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+
+  // 手写 store 模式 zip（不压缩）：本地头 + 中央目录 + 结尾记录，零依赖
+  function buildZip(entries) {
+    var enc = new TextEncoder();
+    var parts = [];
+    var central = [];
+    var offset = 0;
+    var now = new Date();
+    var dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xffff;
+    var dosDate = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xffff;
+
+    entries.forEach(function (e) {
+      var name = enc.encode(e.name);
+      var data = e.data;
+      var crc = crc32(data);
+
+      var lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true);
+      lh.setUint16(4, 20, true);
+      lh.setUint16(6, 0x0800, true);        // UTF-8 文件名
+      lh.setUint16(8, 0, true);             // store 不压缩
+      lh.setUint16(10, dosTime, true);
+      lh.setUint16(12, dosDate, true);
+      lh.setUint32(14, crc, true);
+      lh.setUint32(18, data.length, true);
+      lh.setUint32(22, data.length, true);
+      lh.setUint16(26, name.length, true);
+      lh.setUint16(28, 0, true);
+      parts.push(lh.buffer, name, data);
+
+      var ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true);
+      ch.setUint16(4, 20, true);
+      ch.setUint16(6, 20, true);
+      ch.setUint16(8, 0x0800, true);
+      ch.setUint16(10, 0, true);
+      ch.setUint16(12, dosTime, true);
+      ch.setUint16(14, dosDate, true);
+      ch.setUint32(16, crc, true);
+      ch.setUint32(20, data.length, true);
+      ch.setUint32(24, data.length, true);
+      ch.setUint16(28, name.length, true);
+      ch.setUint32(42, offset, true);
+      central.push(ch.buffer, name);
+
+      offset += 30 + name.length + data.length;
+    });
+
+    var cdStart = offset;
+    var cdSize = 0;
+    central.forEach(function (p) { cdSize += p.byteLength; });
+    central.forEach(function (p) { parts.push(p); });
+
+    var eocd = new DataView(new ArrayBuffer(22));
+    eocd.setUint32(0, 0x06054b50, true);
+    eocd.setUint16(8, entries.length, true);
+    eocd.setUint16(10, entries.length, true);
+    eocd.setUint32(12, cdSize, true);
+    eocd.setUint32(16, cdStart, true);
+    parts.push(eocd.buffer);
+
+    return parts;
+  }
+
+  // 把清洗后的对话重建为官方 v3 会话结构（数字 id + parent_id 链 + 大写 role）
+  function buildV3Session(c, keepThink) {
+    var ts = c.ts ? new Date(c.ts).toISOString() : new Date().toISOString();
+    var msgs = c.messages.filter(function (m) { return m.role !== 'system'; });
+    var out = [];
+    var prev = null;
+    for (var i = 0; i < msgs.length; i++) {
+      var m = msgs[i];
+      var id = i + 1;
+      var frags = [];
+      if (m.role === 'user') {
+        frags.push({ type: 'REQUEST', content: m.text });
+      } else {
+        if (keepThink && m.think) frags.push({ type: 'THINK', content: m.think });
+        frags.push({ type: 'RESPONSE', content: m.text });
+      }
+      out.push({
+        id: id,
+        parent_id: prev,
+        role: m.role === 'user' ? 'USER' : 'ASSISTANT',
+        status: 'FINISHED',
+        thinking_enabled: false,
+        search_enabled: false,
+        accumulated_token_usage: 0,
+        inserted_at: ts,
+        fragments: frags
+      });
+      prev = id;
+    }
+    return {
+      id: c.id,
+      title: c.title,
+      pinned: false,
+      current_message_id: prev,
+      inserted_at: ts,
+      updated_at: ts,
+      messages: out
+    };
+  }
+
+  function exportZipV3() {
     var sel = chosen();
     if (!sel.length) return toast('先勾选至少一条对话', 'warn');
 
@@ -2377,16 +2550,28 @@
     showMask('正在打包…', '0 / ' + sel.length);
     setProgress(0);
 
-    var parts = ['['];
-    eachPicked(sel, function (c, k) {
-      if (k) parts.push(',');
-      parts.push(JSON.stringify(buildConv(c, keep)));
+    var enc = new TextEncoder();
+    var entries = [];
+    var sessionIndex = [];
+
+    eachPicked(sel, function (c) {
+      var sess = buildV3Session(c, keep);
+      sessionIndex.push({
+        id: sess.id, title: sess.title, pinned: false,
+        message_count: sess.messages.length,
+        inserted_at: sess.inserted_at, updated_at: sess.updated_at
+      });
+      entries.push({
+        name: 'chat_sessions/' + sess.id + '.json',
+        data: enc.encode(JSON.stringify(sess))
+      });
     }).then(function () {
-      parts.push(']');
-      saveBlob(parts, 'application/json;charset=utf-8',
-        '对话存档_' + sel.length + '条_' + stamp() + '.json');
+      entries.push({ name: 'manifest.json', data: enc.encode('{"export_format_version":3}') });
+      entries.push({ name: 'chat_session_index.json', data: enc.encode(JSON.stringify(sessionIndex)) });
+      saveBlob(buildZip(entries), 'application/zip',
+        '对话存档_' + sel.length + '条_' + stamp() + '.zip');
       hideMask();
-      toast('已导出 ' + sel.length + ' 条对话');
+      toast('已导出 ' + sel.length + ' 条对话（官方格式）');
     }).catch(function (err) {
       hideMask();
       toast('导出失败：' + (err && err.message ? err.message : err), 'err');
@@ -2447,6 +2632,25 @@
   function toggleTpl() {
     var wrap = $('tplWrap');
     if (wrap) wrap.style.display = el.mode.value === 'summary' ? '' : 'none';
+  }
+
+  /* 记住上次选的格式与模板：首次默认纯净对话，文游用户可以切到续玩格式后一直沿用 */
+  var PREF_KEY = 'dsm-prefs';
+
+  function loadPrefs() {
+    try {
+      var raw = localStorage.getItem(PREF_KEY);
+      if (!raw) return;
+      var p = JSON.parse(raw) || {};
+      if (p.mode === 'clean' || p.mode === 'summary') el.mode.value = p.mode;
+      if (p.tpl && TEMPLATES[p.tpl]) el.tpl.value = p.tpl;
+    } catch (e) {}
+  }
+
+  function savePrefs() {
+    try {
+      localStorage.setItem(PREF_KEY, JSON.stringify({ mode: el.mode.value, tpl: el.tpl.value }));
+    } catch (e) {}
   }
 
   /* ---------- 复制 ---------- */
@@ -2640,12 +2844,17 @@
   });
   el.keepThink.addEventListener('change', loadActive);
   el.keepSystem.addEventListener('change', loadActive);
-  el.tpl.addEventListener('change', loadActive);
+  el.tpl.addEventListener('change', function () {
+    savePrefs();
+    loadActive();
+  });
   el.mode.addEventListener('change', function () {
     syncExportLabel();
     toggleTpl();
+    savePrefs();
     loadActive();
   });
+  loadPrefs();
   syncExportLabel();
   toggleTpl();
 
@@ -2657,9 +2866,9 @@
     toast('已下载 ' + safeName(activeConv.title) + '_存档.txt');
   });
 
-  $('expJson').addEventListener('click', exportJson);
+  $('expJson').addEventListener('click', exportZipV3);
   $('expTxt').addEventListener('click', exportTxt);
-  $('dockJson').addEventListener('click', exportJson);
+  $('dockJson').addEventListener('click', exportZipV3);
   $('dockCopy').addEventListener('click', copyPreview);
 
   window.addEventListener('beforeunload', function (e) {
