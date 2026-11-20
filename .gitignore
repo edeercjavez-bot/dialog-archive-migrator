@@ -11,3 +11,6 @@ desktop.ini
 # 忽略本地测试用的导出数据（避免误传真实对话）
 conversations.json
 *.local.zip
+
+# 真实的 DeepSeek 导出数据（隐私，勿提交）
+deepseek_data-*.zip

@@ -423,6 +423,31 @@
     padding:0 6px;border-radius:5px;
     line-height:1.55;
   }
+  .item-meta-right{display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
+  .item-del{
+    width:20px;height:20px;padding:0;border-radius:6px;flex-shrink:0;
+    background:transparent;border:none;color:var(--dim);
+    display:inline-flex;align-items:center;justify-content:center;
+    opacity:0;transition:opacity .15s,background .15s,color .15s;
+  }
+  .item:hover .item-del,.item-del:focus-visible{opacity:1}
+  .item-del:hover{background:rgba(248,113,113,.16);color:#fca5a5}
+  .item-del svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round}
+  @media (hover:none){.item-del{opacity:.55}}
+  .list-more{
+    width:100%;padding:9px 10px;border-radius:10px;
+    background:rgba(7,11,20,.58);border:1px dashed var(--line);
+    color:var(--muted);font-size:.78rem;font-weight:400;
+  }
+  .list-more:hover{border-color:var(--line-strong);color:var(--text)}
+  .src-filter-wrap{display:none;width:100%;margin-bottom:10px}
+  .src-filter-wrap select{
+    width:100%;padding:8px 10px;border-radius:10px;
+    border:1px solid var(--line);background:rgba(7,11,20,.78);
+    color:var(--text-2);font-size:.8rem;outline:none;font-family:inherit;cursor:pointer;
+    transition:border-color .15s,box-shadow .15s;
+  }
+  .src-filter-wrap select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(93,163,255,.14)}
   .empty{
     padding:36px 12px;text-align:center;
     color:var(--dim);font-size:.84rem;
@@ -640,6 +665,9 @@
   @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
   .mask p{font-size:.9rem;font-weight:500;color:var(--text)}
   .mask small{font-size:.76rem;color:var(--muted);max-width:260px;text-align:center}
+  .mask .prog{width:230px;height:4px;border-radius:99px;background:var(--surface-3);overflow:hidden;display:none}
+  .mask .prog.on{display:block}
+  .mask .prog i{display:block;height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--mint));transition:width .2s linear}
 
   /* ---------- Mobile Bottom Dock ---------- */
 
@@ -760,7 +788,7 @@
         </svg>
       </div>
       <h2>点击选择，或把导出文件拖到这里</h2>
-      <p>支持 DeepSeek 官方导出的 <code>.zip</code> 压缩包（自动解包，无需手动解压）或 <code>conversations.json</code>。<br>可一次多选多个账号的导出文件，自动按对话 ID 去重合并。</p>
+      <p>支持 DeepSeek 官方导出的 <code>.zip</code> 压缩包（自动解包，无需手动解压，新旧两种导出格式均可）或 <code>conversations.json</code>。<br>可一次多选多个账号的导出文件，自动按对话 ID 去重合并。</p>
       <span class="drop-cta">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
         选择导出文件
@@ -809,7 +837,7 @@
       </button>
       <button type="button" class="mint" id="expTxt">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        生成前情提要 .txt
+        <span id="expTxtText">生成前情提要 .txt</span>
       </button>
     </div>
   </div>
@@ -839,6 +867,12 @@
         </button>
       </div>
 
+      <div class="select-wrap src-filter-wrap" id="srcFilterWrap">
+        <select id="srcFilter" aria-label="按来源文件筛选">
+          <option value="">全部来源</option>
+        </select>
+      </div>
+
       <div class="list" id="list" role="listbox" aria-label="已载入对话"></div>
     </section>
 
@@ -865,11 +899,27 @@
             <span>保留思考链</span>
           </label>
         </div>
+        <div class="opt">
+          <label class="switch-wrap" for="keepSystem">
+            <input type="checkbox" class="switch" id="keepSystem" checked>
+            <span>保留设定消息</span>
+          </label>
+        </div>
         <div class="opt opt-mode">
           <div class="select-wrap">
             <select id="mode" aria-label="输出格式">
               <option value="summary">续玩格式（带前情指令）</option>
               <option value="clean">纯净对话</option>
+            </select>
+          </div>
+        </div>
+        <div class="opt" id="tplWrap">
+          <div class="select-wrap">
+            <select id="tpl" aria-label="指令模板">
+              <option value="rpg">文游 GM 模板</option>
+              <option value="yc">语C 单角色模板</option>
+              <option value="novel">小说续写模板</option>
+              <option value="plain">通用对话模板</option>
             </select>
           </div>
         </div>
@@ -927,6 +977,7 @@
     <div class="spin"></div>
     <p id="maskText">正在解析…</p>
     <small id="maskSub"></small>
+    <div class="prog" id="maskProg"><i id="maskBar"></i></div>
   </div>
 </div>
 
@@ -936,33 +987,45 @@
 </div>
 
 <script>
+
 (function () {
   'use strict';
 
-  /* ---------- 状态 ---------- */
-
-  var files = new Set();
-  var convs = [];
-  var view = [];
-  var picked = new Set();
-  var activeId = null;
-  var busy = false;
-  var dragDepth = 0;
+  /* ---------- 元素 ---------- */
 
   var $ = function (id) { return document.getElementById(id); };
   var el = {
     landing: $('landing'), drop: $('drop'), picker: $('picker'),
     bar: $('bar'), grid: $('grid'), dock: $('dock'), dragCover: $('dragCover'),
     nFiles: $('nFiles'), nTotal: $('nTotal'), nPick: $('nPick'), viewCount: $('viewCount'),
-    list: $('list'), q: $('q'), clearQ: $('clearQ'),
+    list: $('list'), q: $('q'), clearQ: $('clearQ'), srcFilter: $('srcFilter'), srcFilterWrap: $('srcFilterWrap'),
     curTitle: $('curTitle'), curSub: $('curSub'),
-    userTag: $('userTag'), aiTag: $('aiTag'), keepThink: $('keepThink'), mode: $('mode'),
+    userTag: $('userTag'), aiTag: $('aiTag'), keepThink: $('keepThink'), keepSystem: $('keepSystem'), mode: $('mode'), tpl: $('tpl'),
     stats: $('stats'), out: $('out'), copyBtnText: $('copyBtnText'),
     mask: $('mask'), maskText: $('maskText'), maskSub: $('maskSub'),
+    maskProg: $('maskProg'), maskBar: $('maskBar'),
     toast: $('toast'), toastMsg: $('toastMsg')
   };
 
-  /* ---------- 工具 ---------- */
+  /* ---------- 状态 ---------- */
+
+  // 正文不再常驻内存：解析完逐条落 IndexedDB，内存里只留轻量索引。
+  var files = new Set();
+  var index = [];            // {id,title,ts,source,count,chars}
+  var byId = new Map();
+  var ids = new Set();       // 跨文件去重
+  var view = [];
+  var picked = new Set();
+  var activeId = null;
+  var activeConv = null;     // 当前预览的完整对话（按需从库里读）
+  var busy = false;
+  var dragDepth = 0;
+  var previewToken = 0;
+
+  var MAX_UNCOMPRESSED = 2 * 1024 * 1024 * 1024;   // 单文件解压后上限
+  var WARN_CHARS = 2000000;                        // 导出前的体量提醒
+
+  /* ---------- 通用工具 ---------- */
 
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
 
@@ -993,6 +1056,12 @@
     });
   }
 
+  function mbStr(bytes) {
+    if (!bytes) return '0 MB';
+    var mb = bytes / 1048576;
+    return (mb >= 100 ? mb.toFixed(0) : mb.toFixed(1)) + ' MB';
+  }
+
   function estTokens(text) {
     if (!text) return 0;
     var cjk = 0;
@@ -1010,13 +1079,22 @@
     return Math.max(1, Math.round(cjk * 0.72 + (len - cjk) * 0.28));
   }
 
+  // 同一份文本（同对话 + 同选项 + 同称呼）重复预览时直接命中缓存，不再全量扫描
+  var estCache = { key: '', value: 0 };
+  function estTokensCached(text, key) {
+    if (key === estCache.key) return estCache.value;
+    estCache.key = key;
+    estCache.value = estTokens(text);
+    return estCache.value;
+  }
+
   function toast(msg, type) {
     el.toastMsg.textContent = msg;
     el.toast.classList.remove('warn', 'err');
     if (type === 'warn' || type === 'err') el.toast.classList.add(type);
     el.toast.classList.add('show');
     clearTimeout(toast._t);
-    toast._t = setTimeout(function () { el.toast.classList.remove('show'); }, 2800);
+    toast._t = setTimeout(function () { el.toast.classList.remove('show'); }, 3200);
   }
 
   function showMask(text, sub) {
@@ -1024,13 +1102,121 @@
     el.maskSub.textContent = sub || '';
     el.mask.style.display = 'flex';
   }
-  function hideMask() { el.mask.style.display = 'none'; }
-
-  function tick() {
-    return new Promise(function (r) { setTimeout(r, 36); });
+  function hideMask() {
+    el.mask.style.display = 'none';
+    setProgress(null);
+  }
+  function setProgress(pct, sub) {
+    if (pct == null) {
+      el.maskProg.classList.remove('on');
+      el.maskBar.style.width = '0%';
+      return;
+    }
+    el.maskProg.classList.add('on');
+    el.maskBar.style.width = Math.max(2, Math.min(100, pct)) + '%';
+    if (sub != null) el.maskSub.textContent = sub;
   }
 
-  /* ---------- ZIP：原生解包，零第三方依赖 ---------- */
+  function tick() {
+    return new Promise(function (r) { setTimeout(r, 32); });
+  }
+
+  // 长任务里定期让出主线程，否则界面会僵住
+  var lastPace = 0;
+  function pace() {
+    var now = Date.now();
+    if (now - lastPace < 45) return Promise.resolve();
+    lastPace = now;
+    return new Promise(function (r) { setTimeout(r, 0); });
+  }
+
+  /* ---------- 存储：IndexedDB（不可用时退回内存） ---------- */
+
+  var DB_NAME = 'dsm-archive';
+  var STORE = 'convs';
+  var db = null;
+  var mem = null;
+  var dbReady = null;
+
+  function openDb() {
+    if (dbReady) return dbReady;
+    dbReady = new Promise(function (resolve) {
+      if (typeof indexedDB === 'undefined') { mem = new Map(); return resolve(); }
+      var req;
+      try { req = indexedDB.open(DB_NAME, 1); } catch (e) { mem = new Map(); return resolve(); }
+      req.onupgradeneeded = function () {
+        var d = req.result;
+        if (!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE, { keyPath: 'id' });
+      };
+      req.onsuccess = function () { db = req.result; resolve(); };
+      req.onerror = function () { mem = new Map(); resolve(); };
+      req.onblocked = function () { mem = new Map(); resolve(); };
+    });
+    return dbReady;
+  }
+
+  function dbPutBatch(list) {
+    if (mem) {
+      for (var i = 0; i < list.length; i++) mem.set(list[i].id, list[i]);
+      return Promise.resolve();
+    }
+    return new Promise(function (resolve, reject) {
+      var t;
+      try { t = db.transaction(STORE, 'readwrite'); } catch (e) { return reject(e); }
+      var s = t.objectStore(STORE);
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        s.put({ id: c.id, title: c.title, ts: c.ts, source: c.source, messages: c.messages });
+      }
+      t.oncomplete = function () { resolve(); };
+      t.onerror = function () { reject(t.error || new Error('DB_WRITE')); };
+      t.onabort = function () { reject(t.error || new Error('DB_ABORT')); };
+    });
+  }
+
+  function dbGet(id) {
+    if (mem) return Promise.resolve(mem.get(id) || null);
+    return new Promise(function (resolve) {
+      var r;
+      try { r = db.transaction(STORE, 'readonly').objectStore(STORE).get(id); }
+      catch (e) { return resolve(null); }
+      r.onsuccess = function () { resolve(r.result || null); };
+      r.onerror = function () { resolve(null); };
+    });
+  }
+
+  function dbClear() {
+    if (mem) { mem.clear(); return Promise.resolve(); }
+    if (!db) return Promise.resolve();
+    return new Promise(function (resolve) {
+      var t;
+      try { t = db.transaction(STORE, 'readwrite'); } catch (e) { return resolve(); }
+      t.objectStore(STORE).clear();
+      t.oncomplete = function () { resolve(); };
+      t.onerror = function () { resolve(); };
+    });
+  }
+
+  function dbDelete(id) {
+    if (mem) { mem.delete(id); return Promise.resolve(); }
+    if (!db) return Promise.resolve();
+    return new Promise(function (resolve) {
+      var t;
+      try { t = db.transaction(STORE, 'readwrite'); } catch (e) { return resolve(); }
+      t.objectStore(STORE).delete(id);
+      t.oncomplete = function () { resolve(); };
+      t.onerror = function () { resolve(); };
+    });
+  }
+
+  function storageRoom() {
+    if (!navigator.storage || !navigator.storage.estimate) return Promise.resolve(Infinity);
+    return navigator.storage.estimate().then(function (e) {
+      return Math.max(0, (e.quota || 0) - (e.usage || 0));
+    }).catch(function () { return Infinity; });
+  }
+
+  /* ---------- ZIP：只读尾部中央目录，按需切片解压 ---------- */
 
   var SIG_EOCD = 0x06054b50;
   var SIG_CEN = 0x02014b50;
@@ -1048,71 +1234,56 @@
     return -1;
   }
 
-  function readCentral(buf) {
-    var u8 = new Uint8Array(buf);
-    var dv = new DataView(buf);
-    var eocd = findEOCD(dv, u8.length);
-    if (eocd < 0) throw new Error('NOT_ZIP');
+  function openZip(blob) {
+    var size = blob.size;
+    var tailLen = Math.min(size, 65557);
+    return blob.slice(size - tailLen, size).arrayBuffer().then(function (tailBuf) {
+      var dv = new DataView(tailBuf);
+      var eocd = findEOCD(dv, tailLen);
+      if (eocd < 0) throw new Error('NOT_ZIP');
 
-    var count = dv.getUint16(eocd + 10, true);
-    var cdOff = dv.getUint32(eocd + 16, true);
-    if (count === 0xffff || cdOff === 0xffffffff) throw new Error('ZIP64');
+      var count = dv.getUint16(eocd + 10, true);
+      var cdSize = dv.getUint32(eocd + 12, true);
+      var cdOff = dv.getUint32(eocd + 16, true);
+      if (count === 0xffff || cdOff === 0xffffffff || cdSize === 0xffffffff) throw new Error('ZIP64');
 
-    var entries = new Map();
-    var p = cdOff;
-    var td = new TextDecoder('utf-8');
-    for (var i = 0; i < count; i++) {
-      if (p + 46 > u8.length || dv.getUint32(p, true) !== SIG_CEN) break;
-      var method = dv.getUint16(p + 10, true);
-      var compSize = dv.getUint32(p + 20, true);
-      var size = dv.getUint32(p + 24, true);
-      var nameLen = dv.getUint16(p + 28, true);
-      var extraLen = dv.getUint16(p + 30, true);
-      var cmtLen = dv.getUint16(p + 32, true);
-      var locOff = dv.getUint32(p + 42, true);
-      if (compSize === 0xffffffff || size === 0xffffffff || locOff === 0xffffffff) {
-        throw new Error('ZIP64');
+      var cdEnd = Math.min(size, cdOff + cdSize);
+      return blob.slice(cdOff, cdEnd).arrayBuffer();
+    }).then(function (cdBuf) {
+      var u8 = new Uint8Array(cdBuf);
+      var cdv = new DataView(cdBuf);
+      var entries = new Map();
+      var p = 0;
+      var td = new TextDecoder('utf-8');
+
+      while (p + 46 <= u8.length && cdv.getUint32(p, true) === SIG_CEN) {
+        var method = cdv.getUint16(p + 10, true);
+        var compSize = cdv.getUint32(p + 20, true);
+        var usize = cdv.getUint32(p + 24, true);
+        var nameLen = cdv.getUint16(p + 28, true);
+        var extraLen = cdv.getUint16(p + 30, true);
+        var cmtLen = cdv.getUint16(p + 32, true);
+        var locOff = cdv.getUint32(p + 42, true);
+        if (compSize === 0xffffffff || usize === 0xffffffff || locOff === 0xffffffff) throw new Error('ZIP64');
+        if (p + 46 + nameLen > u8.length) throw new Error('ZIP_BROKEN');
+
+        var name = td.decode(u8.subarray(p + 46, p + 46 + nameLen));
+        if (
+          name.charAt(name.length - 1) !== '/' &&
+          usize > 0 &&
+          !/^__MACOSX\//i.test(name) &&
+          !/(^|\/)\._/.test(name)
+        ) {
+          entries.set(name, { name: name, method: method, compSize: compSize, size: usize, locOff: locOff });
+        }
+        p += 46 + nameLen + extraLen + cmtLen;
       }
-      if (p + 46 + nameLen > u8.length) throw new Error('ZIP_BROKEN');
-
-      var name = td.decode(u8.subarray(p + 46, p + 46 + nameLen));
-      if (
-        name.charAt(name.length - 1) !== '/' &&
-        size > 0 &&
-        !/^__MACOSX\//i.test(name) &&
-        !/(^|\/)\._/.test(name)
-      ) {
-        entries.set(name, { method: method, compSize: compSize, size: size, locOff: locOff });
-      }
-      p += 46 + nameLen + extraLen + cmtLen;
-    }
-    return { u8: u8, dv: dv, entries: entries };
+      if (!entries.size) throw new Error('ZIP_BROKEN');
+      return { blob: blob, entries: entries };
+    });
   }
 
-  function rawSlice(zip, e) {
-    var off = e.locOff;
-    if (off + 30 > zip.u8.length || zip.dv.getUint32(off, true) !== SIG_LOC) {
-      throw new Error('ZIP_BROKEN');
-    }
-    var nameLen = zip.dv.getUint16(off + 26, true);
-    var extraLen = zip.dv.getUint16(off + 28, true);
-    var start = off + 30 + nameLen + extraLen;
-    if (start + e.compSize > zip.u8.length) throw new Error('ZIP_BROKEN');
-    return zip.u8.subarray(start, start + e.compSize);
-  }
-
-  function inflateRaw(bytes) {
-    if (typeof DecompressionStream === 'undefined') {
-      return Promise.reject(new Error('NO_STREAM'));
-    }
-    var ds = new DecompressionStream('deflate-raw');
-    var stream = new Blob([bytes]).stream().pipeThrough(ds);
-    return new Response(stream).arrayBuffer().then(function (b) { return new Uint8Array(b); });
-  }
-
-  function extractJson(buf) {
-    var zip = readCentral(buf);
-
+  function pickEntry(zip) {
     var names = [];
     zip.entries.forEach(function (_, k) { names.push(k); });
 
@@ -1125,22 +1296,210 @@
       target = jsons[0];
     }
     if (!target) throw new Error('NO_JSON');
+    return zip.entries.get(target);
+  }
 
-    var e = zip.entries.get(target);
-    var raw = rawSlice(zip, e);
+  // 只把这一条目的压缩切片交给解压流，整个包从不进内存
+  function entryStream(zip, ent) {
+    return zip.blob.slice(ent.locOff, ent.locOff + 30).arrayBuffer().then(function (lhBuf) {
+      if (lhBuf.byteLength < 30) throw new Error('ZIP_BROKEN');
+      var lh = new DataView(lhBuf);
+      if (lh.getUint32(0, true) !== SIG_LOC) throw new Error('ZIP_BROKEN');
 
-    var step;
-    if (e.method === 0) {
-      step = Promise.resolve(raw);
-    } else if (e.method === 8) {
-      step = inflateRaw(raw);
-    } else {
-      return Promise.reject(new Error('ZIP_METHOD'));
+      var nameLen = lh.getUint16(26, true);
+      var extraLen = lh.getUint16(28, true);
+      var start = ent.locOff + 30 + nameLen + extraLen;
+      var raw = zip.blob.slice(start, start + ent.compSize);
+
+      if (ent.method === 0) return streamOf(raw);
+      if (ent.method !== 8) throw new Error('ZIP_METHOD');
+      if (typeof DecompressionStream === 'undefined') throw new Error('NO_STREAM');
+      return raw.stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    });
+  }
+
+  function streamOf(blob) {
+    if (blob.stream) return blob.stream();
+    return blob.arrayBuffer().then(function (b) {
+      return new ReadableStream({
+        start: function (ctrl) { ctrl.enqueue(new Uint8Array(b)); ctrl.close(); }
+      });
+    });
+  }
+
+  /* ---------- 新版导出（export_format_version 3）：chat_sessions/<id>.json 每会话一个文件 ---------- */
+
+  function readEntryText(zip, ent) {
+    return entryStream(zip, ent).then(function (stream) {
+      var reader = stream.getReader();
+      var dec = new TextDecoder('utf-8');
+      var out = '';
+      function loop() {
+        return reader.read().then(function (r) {
+          if (r.done) return out + dec.decode();
+          out += dec.decode(r.value, { stream: true });
+          return loop();
+        });
+      }
+      return loop();
+    });
+  }
+
+  function listV3Sessions(zip) {
+    var out = [];
+    zip.entries.forEach(function (ent, name) {
+      if (/^chat_sessions\/[^\/]+\.json$/i.test(name)) out.push(ent);
+    });
+    return out;
+  }
+
+  // 转成旧版 mapping 结构，让 mainChain / parseMessage 原样工作
+  // 只保留 REQUEST / RESPONSE / CONTENT / THINK，TOOL_SEARCH 等工具碎片不进正文
+  function convertV3Session(sess) {
+    if (!sess || typeof sess !== 'object' || !Array.isArray(sess.messages)) return sess;
+    var KEEP = { REQUEST: 1, RESPONSE: 1, CONTENT: 1, THINK: 1 };
+    var mapping = {};
+    for (var i = 0; i < sess.messages.length; i++) {
+      var m = sess.messages[i];
+      if (!m || m.id == null) continue;
+      var key = String(m.id);
+      var frags = [];
+      if (Array.isArray(m.fragments)) {
+        for (var j = 0; j < m.fragments.length; j++) {
+          var f = m.fragments[j];
+          if (f && KEEP[String(f.type || '').toUpperCase()]) {
+            frags.push({ type: f.type, content: cleanText(f.content) });
+          }
+        }
+      }
+      mapping[key] = {
+        id: key,
+        parent: m.parent_id != null ? String(m.parent_id) : null,
+        children: [],
+        message: {
+          id: key,
+          role: String(m.role || '').toLowerCase() === 'user' ? 'user' : 'assistant',
+          fragments: frags,
+          inserted_at: m.inserted_at
+        }
+      };
+    }
+    Object.keys(mapping).forEach(function (k) {
+      var p = mapping[k].parent;
+      if (p && mapping[p]) mapping[p].children.push(k);
+    });
+    return {
+      id: sess.id,
+      title: sess.title,
+      create_time: sess.inserted_at,
+      updated_at: sess.updated_at,
+      current_node: sess.current_message_id != null ? String(sess.current_message_id) : null,
+      mapping: mapping
+    };
+  }
+
+  function ingestV3(zip, entries, source, onProgress) {
+    var added = 0;
+    var dupes = 0;
+    var skipped = 0;
+    var i = 0;
+
+    function next() {
+      if (i >= entries.length) {
+        return Promise.resolve({ added: added, dupes: dupes, skipped: skipped });
+      }
+      var k = i++;
+      var ent = entries[k];
+
+      return readEntryText(zip, ent).then(function (text) {
+        var raw;
+        try { raw = JSON.parse(text); } catch (e) { skipped++; return; }
+
+        var n;
+        try { n = normalize(convertV3Session(raw), source); } catch (e) { skipped++; return; }
+        if (!n) { skipped++; return; }
+        if (ids.has(n.id)) { dupes++; return; }
+        ids.add(n.id);
+
+        return dbPutBatch([n]).then(function () {
+          indexConv(n);
+          added++;
+        });
+      }).catch(function () {
+        skipped++;
+      }).then(function () {
+        onProgress(k + 1, entries.length);
+        return pace();
+      }).then(next);
     }
 
-    return step.then(function (bytes) {
-      return new TextDecoder('utf-8').decode(bytes);
-    });
+    return next();
+  }
+
+  /* ---------- 分段解析：按顶层数组元素切开，不整体 JSON.parse ---------- */
+
+  // 只跟踪字符串状态与花括号深度，跨块延续；每切出一条完整的对话对象就交出去。
+  function makeSplitter(onConv) {
+    var mode = null;          // 'array' 根是数组 / 'object' 外面包了一层
+    var depth = 0;
+    var inStr = false;
+    var escaped = false;
+    var collecting = false;
+    var buf = '';
+    var seen = 0;
+
+    function push(text) {
+      var n = text.length;
+      var i = 0;
+
+      if (mode === null) {
+        while (i < n && text.charCodeAt(i) <= 32) i++;
+        if (i >= n) return;
+        mode = text.charCodeAt(i) === 91 ? 'array' : 'object';
+      }
+
+      var base = mode === 'array' ? 0 : 1;
+      var segStart = 0;
+      i = 0;
+
+      while (i < n) {
+        var c = text.charCodeAt(i);
+        if (inStr) {
+          if (escaped) { escaped = false; i++; continue; }
+          if (c === 92) { escaped = true; i++; continue; }
+          if (c === 34) inStr = false;
+          i++; continue;
+        }
+        if (c === 34) { inStr = true; i++; continue; }
+        if (c === 123) {
+          if (!collecting && depth === base) { collecting = true; segStart = i; buf = ''; }
+          depth++; i++; continue;
+        }
+        if (c === 125) {
+          depth--;
+          if (collecting && depth === base) {
+            collecting = false;
+            buf += text.slice(segStart, i + 1);
+            var out = buf;
+            buf = '';
+            segStart = i + 1;
+            seen++;
+            onConv(out);
+          }
+          i++; continue;
+        }
+        i++;
+      }
+
+      if (collecting) buf += text.slice(segStart);
+    }
+
+    function end() {
+      if (collecting) throw new Error('BAD_JSON');
+      return seen;
+    }
+
+    return { push: push, end: end, count: function () { return seen; } };
   }
 
   /* ---------- 解析与清洗 ---------- */
@@ -1150,7 +1509,7 @@
   function parseMessage(msg) {
     if (!msg || typeof msg !== 'object') return null;
 
-    var role = msg.role || (msg.author && msg.author.role) || '';
+    var role = msg.role || (msg.author && msg.author.role) || msg.sender || '';
     var text = '';
     var think = '';
 
@@ -1192,10 +1551,12 @@
     think = think.trim();
 
     if (!text && !think) return null;
-    if (String(role).toLowerCase() === 'system') return null;
 
+    // system 不再丢弃：接口与第三方客户端常把世界观、人设写在 system 里。
+    // 是否出现在输出中由「保留设定消息」开关决定。
+    var rl = String(role).toLowerCase();
     return {
-      role: String(role).toLowerCase() === 'user' ? 'user' : 'assistant',
+      role: (rl === 'user' || rl === 'human') ? 'user' : (rl === 'system' ? 'system' : 'assistant'),
       text: text,
       think: think
     };
@@ -1243,7 +1604,7 @@
       raw = conv.chat_messages.map(function (m) {
         var c = m && m.content;
         return {
-          role: (m && m.author && m.author.role) || (m && m.role),
+          role: (m && m.author && m.author.role) || (m && m.role) || (m && m.sender),
           content: (c && c.parts) ? c.parts.join('\n') : c
         };
       });
@@ -1276,117 +1637,265 @@
     };
   }
 
-  function ingestText(text, source, bag) {
-    text = text.replace(/^\uFEFF/, '');
-    var data;
-    try {
-      data = JSON.parse(text);
-    } catch (e) {
-      throw new Error('BAD_JSON');
+  /* ---------- 导入：流式读完一条落一条 ---------- */
+
+  function indexConv(c) {
+    var chars = 0;
+    for (var j = 0; j < c.messages.length; j++) {
+      chars += c.messages[j].text.length + c.messages[j].think.length;
     }
+    var entry = {
+      id: c.id, title: c.title, ts: c.ts, source: c.source,
+      count: c.messages.length, chars: chars
+    };
+    byId.set(entry.id, entry);
+    index.push(entry);
+  }
 
-    var list = Array.isArray(data) ? data : (data && data.conversations) ? data.conversations : [data];
-    if (!Array.isArray(list)) throw new Error('BAD_SHAPE');
-
+  function ingestStream(stream, source, totalBytes, onProgress) {
+    var reader = stream.getReader();
+    var dec = new TextDecoder('utf-8');
+    var pending = [];
     var added = 0;
     var dupes = 0;
-    for (var i = 0; i < list.length; i++) {
-      var c = list[i];
-      if (!c || typeof c !== 'object') continue;
+    var skipped = 0;
+    var processed = 0;
+    var fileIds = [];
+
+    var splitter = makeSplitter(function (text) {
+      var raw;
+      try { raw = JSON.parse(text); } catch (e) { skipped++; return; }
+      if (!raw || typeof raw !== 'object') return;
+
       var n;
-      try { n = normalize(c, source); } catch (e) { continue; }
-      if (!n) continue;
-      if (bag.has(n.id)) {
-        dupes++;
-        continue;
-      }
-      bag.set(n.id, n);
-      added++;
+      try { n = normalize(raw, source); } catch (e) { skipped++; return; }
+      if (!n) return;
+
+      if (ids.has(n.id)) { dupes++; return; }
+      ids.add(n.id);
+      fileIds.push(n.id);
+      pending.push(n);
+    });
+
+    function flush() {
+      if (!pending.length) return Promise.resolve();
+      var batch = pending;
+      pending = [];
+      return dbPutBatch(batch).then(function () {
+        for (var i = 0; i < batch.length; i++) indexConv(batch[i]);
+        added += batch.length;
+      });
     }
-    return { added: added, dupes: dupes };
+
+    function rollback() {
+      for (var i = 0; i < fileIds.length; i++) {
+        ids.delete(fileIds[i]);
+        byId.delete(fileIds[i]);
+      }
+      var cut = index.length;
+      while (cut > 0 && fileIds.indexOf(index[cut - 1].id) >= 0) cut--;
+      index.length = cut;
+    }
+
+    var lastPaint = 0;
+
+    function loop() {
+      return reader.read().then(function (r) {
+        if (r.done) return finish();
+        processed += r.value.length;
+        splitter.push(dec.decode(r.value, { stream: true }));
+
+        var now = Date.now();
+        if (now - lastPaint > 90) {
+          lastPaint = now;
+          onProgress(processed, totalBytes, added);
+        }
+
+        var step = pending.length >= 16 ? flush() : Promise.resolve();
+        return step.then(pace).then(loop);
+      });
+    }
+
+    function finish() {
+      splitter.push(dec.decode());
+      splitter.end();
+      return flush().then(function () {
+        return { added: added, dupes: dupes, skipped: skipped };
+      });
+    }
+
+    return loop().catch(function (err) {
+      rollback();
+      try { reader.cancel(); } catch (e) {}
+      throw err;
+    });
   }
 
   /* ---------- 导入流程 ---------- */
 
+  function errorText(name, err) {
+    var code = err && err.message;
+    var map = {
+      NOT_ZIP: '不是有效的压缩包',
+      ZIP64: 'ZIP64 格式，请用电脑端解压后导入 json',
+      ZIP_BROKEN: '压缩包结构损坏',
+      NO_JSON: '包里没有找到 json',
+      ZIP_METHOD: '不支持的压缩方式',
+      NO_STREAM: '当前浏览器不支持流式解压（需 iOS 16.4+ / Chrome 80+）',
+      BAD_JSON: '对话数据被截断，JSON 不完整',
+      DB_WRITE: '写入本地存储失败',
+      DB_ABORT: '写入本地存储被中断'
+    };
+    if (err && err.name === 'QuotaExceededError') {
+      return name + '（设备存储空间不足，请先清空或分批导入）';
+    }
+    return name + '（' + (map[code] || '解析失败') + '）';
+  }
+
   function handleFiles(fileList) {
     if (busy || !fileList || !fileList.length) return;
-    busy = true;
 
     var arr = Array.prototype.slice.call(fileList);
-    showMask('正在本地解析…', '文件全程留在你的设备上');
-    tick().then(function () {
-      var bag = new Map();
-      convs.forEach(function (c) { bag.set(c.id, c); });
+    busy = true;
+    showMask('正在准备…', '文件全程留在你的设备里');
 
-      var seq = Promise.resolve();
-      var loaded = 0;
-      var totalDupes = 0;
-      var rejected = [];
+    var rejected = [];
+    var loaded = 0;
+    var totalDupes = 0;
+    var i = 0;
 
-      arr.forEach(function (file) {
-        seq = seq.then(function () {
-          var mb = Math.max(0.1, Math.round(file.size / 1048576 * 10) / 10);
-          showMask('正在解析 ' + file.name, mb + ' MB');
+    openDb().then(tick).then(function next() {
+      if (i >= arr.length) return finish();
 
-          if (file.size > 200 * 1048576) {
-            rejected.push(file.name + '（超过 200MB）');
-            return;
-          }
+      var file = arr[i];
+      var seq = (i + 1) + '/' + arr.length;
+      i++;
 
-          var isZip = /\.zip$/i.test(file.name);
-          if (!isZip && !/\.json$/i.test(file.name)) {
-            rejected.push(file.name + '（仅支持 .zip / .json）');
-            return;
-          }
+      if (!/\.zip$/i.test(file.name) && !/\.json$/i.test(file.name)) {
+        rejected.push(file.name + '（仅支持 .zip / .json）');
+        return next();
+      }
 
-          var p = isZip ? file.arrayBuffer().then(extractJson) : file.text();
+      showMask('正在解析 ' + file.name, seq + ' · ' + mbStr(file.size));
+      setProgress(0);
 
-          return p.then(function (text) {
-            var res = ingestText(text, file.name, bag);
-            totalDupes += res.dupes;
-            if (res.added > 0) {
-              files.add(file.name);
-              loaded += res.added;
-            } else if (res.dupes > 0) {
-              /* 全部为已载入的重复对话，不视为错误 */
-            } else {
-              rejected.push(file.name + '（无有效对话）');
+      var prep;
+      if (/\.zip$/i.test(file.name)) {
+        prep = openZip(file).then(function (zip) {
+          var v3 = listV3Sessions(zip);
+          if (v3.length) {
+            var v3total = 0;
+            for (var vi = 0; vi < v3.length; vi++) v3total += v3[vi].size;
+            if (v3total > MAX_UNCOMPRESSED) {
+              throw new Error('TOO_BIG::' + mbStr(v3total));
             }
-          }).catch(function (err) {
-            var code = err && err.message;
-            if (code === 'NO_JSON') rejected.push(file.name + '（包里没有 json）');
-            else if (code === 'ZIP64') rejected.push(file.name + '（ZIP64 文件过大，请手动解压）');
-            else if (code === 'NO_STREAM') rejected.push(file.name + '（当前浏览器不支持解压）');
-            else if (code === 'ZIP_METHOD') rejected.push(file.name + '（不支持的压缩方式）');
-            else if (code === 'BAD_JSON') rejected.push(file.name + '（JSON 格式损坏）');
-            else rejected.push(file.name + '（解析失败）');
+            return storageRoom().then(function (room) {
+              var need = v3total * 0.85;
+              if (need > room && !confirm(
+                '「' + file.name + '」解压后约 ' + mbStr(v3total) +
+                '，本地可用的存储空间只剩 ' + mbStr(room) + '。\n\n继续可能写到一半失败，建议先用电脑清理或分批导入。仍要继续吗？'
+              )) {
+                throw new Error('CANCELLED');
+              }
+              return { v3zip: zip, v3entries: v3, total: v3total };
+            });
+          }
+          var ent = pickEntry(zip);
+          if (ent.size > MAX_UNCOMPRESSED) {
+            throw new Error('TOO_BIG::' + mbStr(ent.size));
+          }
+          return storageRoom().then(function (room) {
+            var need = ent.size * 0.85;
+            if (need > room && !confirm(
+              '「' + file.name + '」解压后约 ' + mbStr(ent.size) +
+              '，本地可用的存储空间只剩 ' + mbStr(room) + '。\n\n继续可能写到一半失败，建议先用电脑清理或分批导入。仍要继续吗？'
+            )) {
+              throw new Error('CANCELLED');
+            }
+            return entryStream(zip, ent).then(function (stream) {
+              return { stream: stream, total: ent.size };
+            });
           });
         });
-      });
-
-      return seq.then(function () {
-        convs = [];
-        bag.forEach(function (v) { convs.push(v); });
-        convs.sort(function (a, b) { return b.ts - a.ts; });
-
-        if (!convs.length) {
-          hideMask();
-          busy = false;
-          alert('没有解析出有效的对话。\n\n请确认上传的是 DeepSeek 官方导出的压缩包，或其中的 conversations.json。\n\n' + (rejected.length ? rejected.join('\n') : ''));
-          return;
+      } else {
+        if (file.size > MAX_UNCOMPRESSED) {
+          rejected.push(file.name + '（' + mbStr(file.size) + '，超过 2GB，请分批导入）');
+          return next();
         }
+        prep = storageRoom().then(function (room) {
+          var need = file.size * 0.85;
+          if (need > room && !confirm(
+            '「' + file.name + '」大小约 ' + mbStr(file.size) +
+            '，本地可用的存储空间只剩 ' + mbStr(room) + '。\n\n继续可能写到一半失败，建议先用电脑清理或分批导入。仍要继续吗？'
+          )) {
+            throw new Error('CANCELLED');
+          }
+          return { stream: streamOf(file), total: file.size };
+        });
+      }
 
-        if (!activeId || !bag.has(activeId)) activeId = convs[0].id;
+      return prep.then(function (job) {
+        if (job.v3zip) {
+          return ingestV3(job.v3zip, job.v3entries, file.name, function (done, total) {
+            var pct = total ? (done / total) * 100 : null;
+            setProgress(pct, seq + ' · ' + done + ' / ' + total + ' 条对话');
+          });
+        }
+        return ingestStream(job.stream, file.name, job.total, function (p, t, n) {
+          var pct = t ? (p / t) * 100 : null;
+          setProgress(pct, seq + ' · 已读 ' + mbStr(p) + ' / ' + mbStr(t) + ' · ' + n + ' 条对话');
+        });
+      }).then(function (res) {
+        totalDupes += res.dupes;
+        if (res.added > 0) {
+          files.add(file.name);
+          loaded += res.added;
+        } else if (res.dupes > 0) {
+          /* 整个包都是已载入过的对话，不算错误 */
+        } else {
+          rejected.push(file.name + '（没有可用对话）');
+        }
+        return next();
+      }).catch(function (err) {
+        var code = err && err.message;
+        if (code === 'CANCELLED') {
+          rejected.push(file.name + '（已跳过）');
+        } else if (code && code.indexOf('TOO_BIG::') === 0) {
+          rejected.push(file.name + '（解压后 ' + code.slice(9) + '，超过 2GB，请分批导入）');
+        } else {
+          rejected.push(errorText(file.name, err));
+        }
+        return next();
+      });
+    }).catch(function (err) {
+      hideMask();
+      busy = false;
+      toast('解析出错：' + (err && err.message ? err.message : err), 'err');
+    });
 
-        el.landing.style.display = 'none';
-        el.bar.style.display = 'flex';
-        el.grid.style.display = 'grid';
-        el.dock.classList.add('on');
+    function finish() {
+      index.sort(function (a, b) { return b.ts - a.ts; });
 
-        applySearch();
-        updateBar();
-        renderPreview();
+      if (!index.length) {
+        hideMask();
+        busy = false;
+        alert('没有解析出有效的对话。\n\n请确认上传的是 DeepSeek 官方导出的压缩包（新旧格式均可），或旧版导出的 conversations.json。\n\n' +
+          (rejected.length ? rejected.join('\n') : ''));
+        return;
+      }
 
+      if (!activeId || !byId.has(activeId)) activeId = index[0].id;
+
+      el.landing.style.display = 'none';
+      el.bar.style.display = 'flex';
+      el.grid.style.display = 'grid';
+      el.dock.classList.add('on');
+
+      refreshSrcFilter();
+      applySearch();
+      updateBar();
+
+      return loadActive().then(function () {
         hideMask();
         busy = false;
 
@@ -1401,34 +1910,49 @@
           toast('已载入 ' + loaded + ' 条对话');
         }
       });
-    }).catch(function (err) {
-      hideMask();
-      busy = false;
-      toast('解析出错：' + (err && err.message ? err.message : err), 'err');
-    });
+    }
   }
 
   /* ---------- 列表与搜索 ---------- */
 
+  // 来源筛选：只有导入了多个文件时才显示
+  function refreshSrcFilter() {
+    var sel = el.srcFilter;
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">全部来源</option>';
+    files.forEach(function (f) {
+      var o = document.createElement('option');
+      o.value = f;
+      o.textContent = f;
+      sel.appendChild(o);
+    });
+    if (cur && files.has(cur)) sel.value = cur;
+    el.srcFilterWrap.style.display = files.size > 1 ? '' : 'none';
+  }
+
   function applySearch() {
     var rawKw = el.q.value;
     var kw = rawKw.trim().toLowerCase();
+    var src = el.srcFilter.value;
     el.clearQ.classList.toggle('show', rawKw.length > 0);
 
-    view = kw
-      ? convs.filter(function (c) { return c.title.toLowerCase().indexOf(kw) >= 0; })
-      : convs.slice();
+    view = index.filter(function (c) {
+      if (src && c.source !== src) return false;
+      return !kw || c.title.toLowerCase().indexOf(kw) >= 0;
+    });
 
-    el.viewCount.textContent = kw ? (view.length + ' / ' + convs.length) : String(convs.length);
+    el.viewCount.textContent = (kw || src) ? (view.length + ' / ' + index.length) : String(index.length);
 
+    var needLoad = false;
     if (!activeId || !view.some(function (c) { return c.id === activeId; })) {
       var nextId = view.length ? view[0].id : null;
       if (nextId !== activeId) {
         activeId = nextId;
-        renderPreview();
+        needLoad = true;
       }
     }
     renderList();
+    if (needLoad) loadActive();
   }
 
   function syncCheckboxes() {
@@ -1457,68 +1981,146 @@
     }
   }
 
+  var LIST_PAGE = 80;      // 列表分批渲染：先出 80 条，滚动到底或点按钮再追加，几千条也不卡
+  var renderedCount = 0;
+
+  function makeItem(c) {
+    var isOn = c.id === activeId;
+    var item = document.createElement('div');
+    item.className = 'item' + (isOn ? ' on' : '');
+    item.dataset.id = c.id;
+    item.setAttribute('role', 'option');
+    item.setAttribute('aria-selected', isOn ? 'true' : 'false');
+
+    var cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'cb';
+    cb.checked = picked.has(c.id);
+    cb.setAttribute('aria-label', '勾选 ' + c.title);
+    cb.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (cb.checked) picked.add(c.id);
+      else picked.delete(c.id);
+      updateBar();
+    });
+
+    var dateStr = fmtDate(c.ts);
+    var body = document.createElement('div');
+    body.className = 'item-body';
+    body.innerHTML =
+      '<div class="item-title" title="' + esc(c.title) + '">' + esc(c.title) + '</div>' +
+      '<div class="item-meta">' +
+        '<span class="item-meta-left">' + c.count + ' 条' + (dateStr ? ' · ' + esc(dateStr) : '') + '</span>' +
+        '<span class="item-meta-right">' +
+          '<span class="item-src" title="' + esc(c.source) + '">' + esc(c.source) + '</span>' +
+          '<button type="button" class="item-del" title="删除这条对话" aria-label="删除 ' + esc(c.title) + '">' +
+            '<svg viewBox="0 0 24 24" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>' +
+          '</button>' +
+        '</span>' +
+      '</div>';
+
+    body.querySelector('.item-del').addEventListener('click', function (e) {
+      e.stopPropagation();
+      deleteConversation(c.id);
+    });
+
+    item.appendChild(cb);
+    item.appendChild(body);
+    item.addEventListener('click', function () {
+      if (activeId === c.id) return;
+      activeId = c.id;
+      setActiveInList(c.id);
+      loadActive();
+    });
+
+    return item;
+  }
+
   function renderList() {
     el.list.innerHTML = '';
+    renderedCount = 0;
 
     if (!view.length) {
       var d = document.createElement('div');
       d.className = 'empty';
-      d.textContent = convs.length ? '没有匹配的对话标题' : '还没有载入任何对话';
+      d.textContent = index.length ? '没有匹配的对话标题' : '还没有载入任何对话';
       el.list.appendChild(d);
       return;
     }
-
-    var frag = document.createDocumentFragment();
-
-    view.forEach(function (c) {
-      var isOn = c.id === activeId;
-      var item = document.createElement('div');
-      item.className = 'item' + (isOn ? ' on' : '');
-      item.dataset.id = c.id;
-      item.setAttribute('role', 'option');
-      item.setAttribute('aria-selected', isOn ? 'true' : 'false');
-
-      var cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.className = 'cb';
-      cb.checked = picked.has(c.id);
-      cb.setAttribute('aria-label', '勾选 ' + c.title);
-      cb.addEventListener('click', function (e) {
-        e.stopPropagation();
-        if (cb.checked) picked.add(c.id);
-        else picked.delete(c.id);
-        updateBar();
-      });
-
-      var dateStr = fmtDate(c.ts);
-      var body = document.createElement('div');
-      body.className = 'item-body';
-      body.innerHTML =
-        '<div class="item-title" title="' + esc(c.title) + '">' + esc(c.title) + '</div>' +
-        '<div class="item-meta">' +
-          '<span class="item-meta-left">' + c.messages.length + ' 条' + (dateStr ? ' · ' + esc(dateStr) : '') + '</span>' +
-          '<span class="item-src" title="' + esc(c.source) + '">' + esc(c.source) + '</span>' +
-        '</div>';
-
-      item.appendChild(cb);
-      item.appendChild(body);
-      item.addEventListener('click', function () {
-        if (activeId === c.id) return;
-        activeId = c.id;
-        setActiveInList(c.id);
-        renderPreview();
-      });
-
-      frag.appendChild(item);
-    });
-
-    el.list.appendChild(frag);
+    appendMoreItems();
   }
+
+  function appendMoreItems() {
+    var sentinel = el.list.querySelector('.list-more');
+    if (sentinel) el.list.removeChild(sentinel);
+
+    var target = Math.min(view.length, renderedCount + LIST_PAGE);
+    var frag = document.createDocumentFragment();
+    for (var i = renderedCount; i < target; i++) frag.appendChild(makeItem(view[i]));
+    el.list.appendChild(frag);
+    renderedCount = target;
+
+    if (renderedCount < view.length) {
+      var more = document.createElement('button');
+      more.type = 'button';
+      more.className = 'list-more';
+      more.textContent = '还有 ' + (view.length - renderedCount) + ' 条，点击加载更多';
+      more.addEventListener('click', appendMoreItems);
+      el.list.appendChild(more);
+    }
+  }
+
+  el.list.addEventListener('scroll', function () {
+    if (renderedCount >= view.length) return;
+    if (el.list.scrollTop + el.list.clientHeight >= el.list.scrollHeight - 240) appendMoreItems();
+  });
 
   function updateBar() {
     el.nFiles.textContent = files.size;
-    el.nTotal.textContent = convs.length;
+    el.nTotal.textContent = index.length;
     el.nPick.textContent = picked.size;
+  }
+
+  function deleteConversation(id) {
+    var meta = byId.get(id);
+    if (!meta) return;
+    if (!confirm('删除「' + meta.title + '」？\n此操作不可恢复。')) return;
+
+    dbDelete(id).then(function () {
+      ids.delete(id);
+      byId.delete(id);
+      picked.delete(id);
+      var at = -1;
+      for (var i = 0; i < index.length; i++) {
+        if (index[i].id === id) { at = i; break; }
+      }
+      if (at >= 0) index.splice(at, 1);
+
+      // 这个来源文件下已经没有对话了，把它也从文件计数里拿掉
+      var sourceGone = !index.some(function (c) { return c.source === meta.source; });
+      if (sourceGone) files.delete(meta.source);
+
+      if (activeId === id) {
+        activeId = null;
+        activeConv = null;
+      }
+
+      if (!index.length) {
+        el.grid.style.display = 'none';
+        el.bar.style.display = 'none';
+        el.dock.classList.remove('on');
+        el.landing.style.display = 'block';
+        el.out.value = '';
+        el.stats.textContent = '—';
+        el.curTitle.textContent = '未选择对话';
+        el.curSub.textContent = '';
+      }
+
+      refreshSrcFilter();
+      applySearch();
+      updateBar();
+      toast('已删除「' + meta.title + '」');
+    });
   }
 
   /* ---------- 预览 ---------- */
@@ -1529,9 +2131,15 @@
     return role === 'user' ? u : a;
   }
 
+  function visibleMessages(c, opts) {
+    return c.messages.filter(function (m) {
+      return opts.keepSystem || m.role !== 'system';
+    });
+  }
+
   function dialogue(c, opts) {
-    var blocks = c.messages.map(function (m) {
-      var head = label(m.role);
+    var blocks = visibleMessages(c, opts).map(function (m) {
+      var head = m.role === 'system' ? '【设定】' : label(m.role);
       var body = m.text;
       if (opts.keepThink && m.think) {
         body = '〔思考过程〕\n' + m.think + '\n〔正文〕\n' + body;
@@ -1542,72 +2150,138 @@
     return blocks.join('\n\n' + '─'.repeat(22) + '\n\n');
   }
 
-  function formatText(c, opts) {
+  // 四套指令模板：只换开头那段委托说明，存档主体完全一致
+  var TEMPLATES = {
+    rpg: [
+      '【系统指令：对话存档迁移与前情提要生成】',
+      '请仔细阅读下面我与前任 GM 的历史存档，然后立即接管本局游戏，完成两件事：',
+      '1. 生成一份结构化的【当前进度存档卡】，包含：世界观与当前所在地点/时间；主角状态、属性、技能与背包；已登场重要 NPC 及其态度关系；主线进度与未解伏笔。',
+      '2. 整理完毕后，保持原有叙事文风与角色人设，紧接存档最后一幕，给出当前局面描述与可选行动，我们直接继续。'
+    ].join('\n'),
+
+    yc: [
+      '【系统指令：对话存档迁移与角色续接】',
+      '请仔细阅读下面这段历史对话，然后继续以对方的身份和我对话，完成两件事：',
+      '1. 先用一小段，以角色的口吻复述你对这段关系的记忆：你们怎么认识的、一起经历过什么、你现在怎么看我。',
+      '2. 复述完之后，保持原有的语气、称呼与说话习惯，紧接最后一句继续，不要总结、不要旁白、不要解释你在做什么。'
+    ].join('\n'),
+
+    novel: [
+      '【系统指令：长篇续写】',
+      '下面是我和另一位作者共同完成的长篇片段。请先简要梳理当前所处的位置：出场人物、已经发生的情节、尚未收束的线索；',
+      '然后保持原有的叙述视角、时态与文风，紧接最后一段继续写，不要总结、不要点评、也不要重复已有内容。'
+    ].join('\n'),
+
+    plain: [
+      '【系统指令：对话存档续接】',
+      '下面是一段较长的历史对话。请先整理出四个部分：已经确认的结论、仍在待办的问题、关键约束与前提、已经排除的方案。',
+      '整理完成后，直接从这个状态继续，不必复述背景。'
+    ].join('\n')
+  };
+
+  function headText(tpl, n) {
+    var s = TEMPLATES[tpl] || TEMPLATES.rpg;
+    if (n > 1) {
+      s += '\n（下面共有 ' + n + ' 段存档，按时间顺序阅读，以最后一段的结尾为当前局面。）';
+    }
+    return s;
+  }
+
+  var HEAD_OPEN = '========== 历史存档开始 ==========';
+  var HEAD_CLOSE = '========== 历史存档结束 ==========';
+
+  // 单条存档块（不含指令头部）：预览、单条下载、批量导出共用同一份拼法
+  function txtBlock(c, opts, k, n) {
     var body = dialogue(c, opts);
-
     if (opts.mode === 'summary') {
-      return [
-        '【系统指令：对话存档迁移与前情提要生成】',
-        '请仔细阅读下面我与前任 GM 的历史存档，然后立即接管本局游戏，完成两件事：',
-        '1. 生成一份结构化的【当前进度存档卡】，包含：世界观与当前所在地点/时间；主角状态、属性、技能与背包；已登场重要 NPC 及其态度关系；主线进度与未解伏笔。',
-        '2. 整理完毕后，保持原有叙事文风与角色人设，紧接存档最后一幕，给出当前局面描述与可选行动，我们直接继续。',
-        '',
-        '========== 历史存档开始（' + c.title + '）==========',
-        '',
-        body,
-        '',
-        '========== 历史存档结束 =========='
-      ].join('\n');
+      return n === 1
+        ? '========== 历史存档开始（' + c.title + '）==========\n\n' + body
+        : '\n##### 存档 ' + (k + 1) + '/' + n + ' · ' + c.title + ' #####\n\n' + body + '\n';
     }
-
-    return '《' + c.title + '》\n' + '='.repeat(30) + '\n\n' + body;
+    return n === 1
+      ? '《' + c.title + '》\n' + '='.repeat(30) + '\n\n' + body
+      : '《' + c.title + '》\n\n' + body;
   }
 
-  function currentConv() {
-    for (var i = 0; i < convs.length; i++) {
-      if (convs[i].id === activeId) return convs[i];
+  function formatText(c, opts) {
+    var body = txtBlock(c, opts, 0, 1);
+    if (opts.mode === 'summary') {
+      return headText(opts.tpl, 1) + '\n\n' + body + '\n\n' + HEAD_CLOSE;
     }
-    return null;
+    return body;
   }
 
-  function renderPreview() {
-    var c = currentConv();
-
-    if (!c) {
-      el.curTitle.textContent = convs.length ? '未选择对话' : '空空如也';
-      el.curSub.textContent = '';
-      el.out.value = '';
-      el.stats.textContent = '—';
-      return;
-    }
-
-    el.curTitle.textContent = c.title;
-    el.curTitle.title = c.title;
-    el.curSub.textContent = c.messages.length + ' 条 · ' + c.source;
-    el.curSub.title = c.source;
-
-    var txt = formatText(c, {
+  function previewOpts() {
+    return {
       mode: el.mode.value,
-      keepThink: el.keepThink.checked
-    });
+      keepThink: el.keepThink.checked,
+      keepSystem: el.keepSystem.checked,
+      tpl: el.tpl.value
+    };
+  }
 
+  function paintPreview() {
+    if (!activeConv) return;
+    var opts = previewOpts();
+    var txt = formatText(activeConv, opts);
     el.out.value = txt;
     el.out.scrollTop = 0;
 
     var n = txt.length;
-    var tk = estTokens(txt);
+    var estKey = activeConv.id + '|' + opts.mode + '|' + opts.keepThink + '|' +
+                 opts.keepSystem + '|' + opts.tpl + '|' + el.userTag.value + '|' + el.aiTag.value;
+    var tk = estTokensCached(txt, estKey);
     el.stats.innerHTML =
-      '<b>' + c.messages.length + '</b> 条消息' +
+      '<b>' + visibleMessages(activeConv, opts).length + '</b> 条消息' +
       '<span class="sep">·</span>' +
       '<b>' + n.toLocaleString() + '</b> 字' +
       '<span class="sep">·</span>' +
       '约 <b>' + tk.toLocaleString() + '</b> tokens';
   }
 
+  function loadActive() {
+    var id = activeId;
+    var token = ++previewToken;
+
+    if (!id || !byId.has(id)) {
+      activeConv = null;
+      el.curTitle.textContent = index.length ? '未选择对话' : '空空如也';
+      el.curSub.textContent = '';
+      el.out.value = '';
+      el.stats.textContent = '—';
+      return Promise.resolve();
+    }
+
+    var meta = byId.get(id);
+    el.curTitle.textContent = meta.title;
+    el.curTitle.title = meta.title;
+    el.curSub.textContent = meta.count + ' 条 · ' + meta.source;
+    el.curSub.title = meta.source;
+
+    // 同一会话切换选项时不必回库重读
+    if (activeConv && activeConv.id === id) {
+      paintPreview();
+      return Promise.resolve();
+    }
+
+    el.stats.textContent = '读取中…';
+
+    return dbGet(id).then(function (c) {
+      if (token !== previewToken) return;
+      activeConv = c;
+      if (!c) {
+        el.out.value = '';
+        el.stats.textContent = '—';
+        return;
+      }
+      paintPreview();
+    });
+  }
+
   var previewTimer;
   function schedulePreview() {
     clearTimeout(previewTimer);
-    previewTimer = setTimeout(renderPreview, 60);
+    previewTimer = setTimeout(loadActive, 60);
   }
 
   /* ---------- 导出 ---------- */
@@ -1616,8 +2290,10 @@
     var mapping = {};
     var prev = null;
     var idx = 0;
+    // 重建的 mapping 里没有 system 的位置，设定消息不写进 JSON
+    var msgs = c.messages.filter(function (m) { return m.role !== 'system'; });
 
-    c.messages.forEach(function (m) {
+    msgs.forEach(function (m) {
       var mid = 'm' + (idx++);
       var frags = [];
 
@@ -1648,14 +2324,14 @@
       update_time: t,
       current_node: prev,
       mapping: mapping,
-      messages: c.messages.map(function (m) {
+      messages: msgs.map(function (m) {
         return { role: m.role, content: m.text };
       })
     };
   }
 
   function chosen() {
-    return convs.filter(function (c) { return picked.has(c.id); });
+    return index.filter(function (c) { return picked.has(c.id); });
   }
 
   function saveBlob(parts, type, name) {
@@ -1679,23 +2355,36 @@
     return cleaned || '未命名对话';
   }
 
+  function eachPicked(sel, onOne) {
+    var i = 0;
+    function step() {
+      if (i >= sel.length) return Promise.resolve();
+      var k = i++;
+      return dbGet(sel[k].id).then(function (c) {
+        if (c) onOne(c, k);
+        setProgress((k + 1) / sel.length * 100, (k + 1) + ' / ' + sel.length);
+        return pace().then(step);
+      });
+    }
+    return step();
+  }
+
   function exportJson() {
     var sel = chosen();
     if (!sel.length) return toast('先勾选至少一条对话', 'warn');
 
-    showMask('正在打包…', sel.length + ' 条对话');
-    tick().then(function () {
-      var keep = el.keepThink.checked;
-      var parts = ['['];
-      sel.forEach(function (c, i) {
-        if (i) parts.push(',');
-        parts.push(JSON.stringify(buildConv(c, keep)));
-      });
-      parts.push(']');
+    var keep = el.keepThink.checked;
+    showMask('正在打包…', '0 / ' + sel.length);
+    setProgress(0);
 
+    var parts = ['['];
+    eachPicked(sel, function (c, k) {
+      if (k) parts.push(',');
+      parts.push(JSON.stringify(buildConv(c, keep)));
+    }).then(function () {
+      parts.push(']');
       saveBlob(parts, 'application/json;charset=utf-8',
         '对话存档_' + sel.length + '条_' + stamp() + '.json');
-
       hideMask();
       toast('已导出 ' + sel.length + ' 条对话');
     }).catch(function (err) {
@@ -1708,24 +2397,56 @@
     var sel = chosen();
     if (!sel.length) return toast('先勾选至少一条对话', 'warn');
 
-    showMask('正在生成…', sel.length + ' 条对话');
-    tick().then(function () {
-      var opts = { mode: 'summary', keepThink: el.keepThink.checked };
-      var parts = [];
-      sel.forEach(function (c, i) {
-        if (i) parts.push('\n\n' + '#'.repeat(36) + '\n\n');
-        parts.push(formatText(c, opts));
-      });
+    // 与单条「下载 .txt」保持一致：跟随右上角的输出格式与指令模板
+    var opts = previewOpts();
+    var isSummary = opts.mode === 'summary';
+    var n = sel.length;
 
+    var total = 0;
+    for (var i = 0; i < n; i++) total += sel[i].chars || 0;
+    if (total > WARN_CHARS && !confirm(
+      '本次会生成约 ' + (total / 10000).toFixed(0) + ' 万字的' +
+      (isSummary ? '前情提要' : '对话正文') +
+      '，文件较大，手机上可能较慢。\n\n建议只勾选最近主线再试，或改在电脑上导出。继续吗？'
+    )) return;
+
+    showMask(isSummary ? '正在生成…' : '正在整理…', '0 / ' + n);
+    setProgress(0);
+
+    var parts = [];
+
+    // 多选时指令只出现一次，存档各自编号，避免同一段委托重复塞进去
+    if (isSummary) {
+      parts.push(headText(opts.tpl, n));
+      parts.push(n > 1 ? '\n\n' + HEAD_OPEN + '\n' : '\n\n');
+    }
+
+    eachPicked(sel, function (c, k) {
+      if (!isSummary && k) parts.push('\n\n' + '#'.repeat(36) + '\n\n');
+      parts.push(txtBlock(c, opts, k, n));
+    }).then(function () {
+      if (isSummary) parts.push(n > 1 ? '\n' + HEAD_CLOSE + '\n' : '\n\n' + HEAD_CLOSE);
       saveBlob(parts, 'text/plain;charset=utf-8',
-        '前情提要_' + sel.length + '条_' + stamp() + '.txt');
-
+        (isSummary ? '前情提要_' : '纯净对话_') + n + '条_' + stamp() + '.txt');
       hideMask();
-      toast('已生成 ' + sel.length + ' 条的前情提要');
+      toast('已生成 ' + n + ' 条' + (isSummary ? '的前情提要' : '的纯净对话'));
     }).catch(function (err) {
       hideMask();
       toast('生成失败：' + (err && err.message ? err.message : err), 'err');
     });
+  }
+
+  // 导出按钮的文案跟着输出格式走，避免「切了纯净对话却导出续玩格式」
+  function syncExportLabel() {
+    var t = $('expTxtText');
+    if (!t) return;
+    t.textContent = el.mode.value === 'summary' ? '生成前情提要 .txt' : '导出纯净对话 .txt';
+  }
+
+  // 指令模板只在续玩格式下有意义
+  function toggleTpl() {
+    var wrap = $('tplWrap');
+    if (wrap) wrap.style.display = el.mode.value === 'summary' ? '' : 'none';
   }
 
   /* ---------- 复制 ---------- */
@@ -1803,22 +2524,22 @@
   }
 
   window.addEventListener('dragenter', function (e) {
-    if (!convs.length || !hasFiles(e)) return;
+    if (!index.length || !hasFiles(e)) return;
     e.preventDefault();
     dragDepth++;
     el.dragCover.classList.add('show');
   });
   window.addEventListener('dragover', function (e) {
-    if (!convs.length || !hasFiles(e)) return;
+    if (!index.length || !hasFiles(e)) return;
     e.preventDefault();
   });
   window.addEventListener('dragleave', function (e) {
-    if (!convs.length) return;
+    if (!index.length) return;
     dragDepth = Math.max(0, dragDepth - 1);
     if (dragDepth === 0) el.dragCover.classList.remove('show');
   });
   window.addEventListener('drop', function (e) {
-    if (!convs.length || !hasFiles(e)) return;
+    if (!index.length || !hasFiles(e)) return;
     e.preventDefault();
     dragDepth = 0;
     el.dragCover.classList.remove('show');
@@ -1858,25 +2579,42 @@
 
   $('resetBtn').addEventListener('click', function () {
     if (!confirm('清空所有已载入的对话？')) return;
-    files.clear();
-    convs = [];
-    view = [];
-    picked.clear();
-    activeId = null;
-    el.q.value = '';
-    el.clearQ.classList.remove('show');
-    el.out.value = '';
-    el.stats.textContent = '—';
-    el.curTitle.textContent = '未选择对话';
-    el.curSub.textContent = '';
-    el.list.innerHTML = '';
-    el.grid.style.display = 'none';
-    el.bar.style.display = 'none';
-    el.dock.classList.remove('on');
-    el.landing.style.display = 'block';
+    busy = true;
+    showMask('正在清理…');
+    dbClear().then(function () {
+      files.clear();
+      index.length = 0;
+      byId.clear();
+      ids.clear();
+      picked.clear();
+      view = [];
+      activeId = null;
+      activeConv = null;
+      el.q.value = '';
+      el.clearQ.classList.remove('show');
+      refreshSrcFilter();
+      el.out.value = '';
+      el.stats.textContent = '—';
+      el.curTitle.textContent = '未选择对话';
+      el.curSub.textContent = '';
+      el.list.innerHTML = '';
+      el.grid.style.display = 'none';
+      el.bar.style.display = 'none';
+      el.dock.classList.remove('on');
+      el.landing.style.display = 'block';
+      hideMask();
+      busy = false;
+    });
   });
 
-  el.q.addEventListener('input', applySearch);
+  // 搜索防抖：连续输入时不急着重建列表
+  var searchTimer;
+  el.q.addEventListener('input', function () {
+    el.clearQ.classList.toggle('show', el.q.value.length > 0);
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applySearch, 150);
+  });
+  el.srcFilter.addEventListener('change', applySearch);
   el.clearQ.addEventListener('click', function () {
     el.q.value = '';
     applySearch();
@@ -1884,7 +2622,7 @@
   });
 
   document.addEventListener('keydown', function (e) {
-    if (!convs.length) return;
+    if (!index.length) return;
     var tag = document.activeElement && document.activeElement.tagName;
     var inInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
     if ((e.key === '/' && !inInput) || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k')) {
@@ -1900,16 +2638,23 @@
   [el.userTag, el.aiTag].forEach(function (i) {
     i.addEventListener('input', schedulePreview);
   });
-  el.keepThink.addEventListener('change', renderPreview);
-  el.mode.addEventListener('change', renderPreview);
+  el.keepThink.addEventListener('change', loadActive);
+  el.keepSystem.addEventListener('change', loadActive);
+  el.tpl.addEventListener('change', loadActive);
+  el.mode.addEventListener('change', function () {
+    syncExportLabel();
+    toggleTpl();
+    loadActive();
+  });
+  syncExportLabel();
+  toggleTpl();
 
   $('copyBtn').addEventListener('click', copyPreview);
 
   $('saveBtn').addEventListener('click', function () {
-    var c = currentConv();
-    if (!c || !el.out.value) return;
-    saveBlob([el.out.value], 'text/plain;charset=utf-8', safeName(c.title) + '_存档.txt');
-    toast('已下载 ' + safeName(c.title) + '_存档.txt');
+    if (!activeConv || !el.out.value) return;
+    saveBlob([el.out.value], 'text/plain;charset=utf-8', safeName(activeConv.title) + '_存档.txt');
+    toast('已下载 ' + safeName(activeConv.title) + '_存档.txt');
   });
 
   $('expJson').addEventListener('click', exportJson);
@@ -1918,13 +2663,23 @@
   $('dockCopy').addEventListener('click', copyPreview);
 
   window.addEventListener('beforeunload', function (e) {
-    if (convs.length) {
+    if (index.length) {
       e.preventDefault();
       e.returnValue = '';
     }
   });
 
+  /* ---------- 启动 ---------- */
+
+  openDb().then(function () {
+    // 索引只在内存里，刷新后旧记录已无意义，顺手清掉，避免残留占空间
+    return dbClear();
+  }).then(function () {
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
+  });
+
 })();
+
 </script>
 </body>
 </html>
